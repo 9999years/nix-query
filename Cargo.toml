@@ -1,10 +1,10 @@
 [package]
 name = "nix-query"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Rebecca Turner <rbt@sent.as>"]
 description = "A cached fuzzy searcher for Nix packages"
 repository = "https://github.com/9999years/nix-query/"
-keywords = ["NixOS", "Nix", "fuzzy search", "package managment", "tui"]
+keywords = ["NixOS", "Nix", "fuzzy-search", "package-managment", "tui"]
 categories = ["command-line-utilities"]
 license = "AGPL-3.0-or-later"
 edition = "2018"
