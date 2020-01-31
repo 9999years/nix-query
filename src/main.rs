@@ -1,6 +1,9 @@
+use std::io;
+use std::io::Write;
+
+use console::{style, Term};
 use skim::{Skim, SkimOptionsBuilder};
 use structopt::StructOpt;
-use colored::*;
 
 use nix_query::{cache, cache::CacheIoError, nix, proc::CommandError};
 
@@ -9,6 +12,13 @@ enum MainErr {
     Cache(CacheIoError),
     Command(CommandError),
     NixQuery(nix::NixQueryError),
+    Io(io::Error),
+}
+
+impl From<io::Error> for MainErr {
+    fn from(e: io::Error) -> Self {
+        MainErr::Io(e)
+    }
 }
 
 impl From<CacheIoError> for MainErr {
@@ -33,7 +43,7 @@ impl From<nix::NixQueryError> for MainErr {
 #[structopt(
     name = "nix-query",
     about = "A tool for interactively and quickly selecting Nix packages by attribute.",
-    version = "0.1.0",
+    version = "0.1.0"
 )]
 struct Opt {
     /// Clears and recalculates the cache.
@@ -52,43 +62,68 @@ struct Opt {
 fn main() -> Result<(), MainErr> {
     let opt = Opt::from_args();
 
+    let mut term = Term::stdout();
+    let mut eterm = Term::stderr();
+
     if opt.clear_cache {
+        term.write_line("Clearing the Nix package name cache.")?;
         cache::clear_cache()?;
+        return Ok(());
     }
 
     if let Some(attr) = opt.info {
-        colored::control::set_override(true);
-        print!("{}", nix::nix_query(&attr)?.console_fmt());
-        colored::control::unset_override();
+        let was_using_colors = console::colors_enabled();
+        console::set_colors_enabled(true);
+
+        // write!(
+        //     term,
+        //     "{}",
+        //     style(format!("(Querying Nix for information about {})", attr)).dim()
+        // )?;
+        let info = nix::nix_query(&attr)?;
+
+        // term.clear_line()?;
+        write!(term, "{}", info.console_fmt())?;
+
+        console::set_colors_enabled(was_using_colors);
         return Ok(());
     }
 
     if !cache::cache_exists() {
-        eprintln!(
+        // Let the user know we need to populate the cache.
+        writeln!(
+            eterm,
             "{}",
-            "Populating the Nix package name cache (this may take a minute or two)..."
+            style("Populating the Nix package name cache (this may take a minute or two)...")
                 .bold()
                 .green(),
-        );
+        )?;
     }
+
     let all_attrs = cache::ensure_cache()?;
 
     if opt.print_cache {
-        print!("{}", all_attrs);
+        term.write_str(&all_attrs)?;
         return Ok(());
     }
 
-    skim_attrs()?;
+    for attr in skim_attrs()? {
+        writeln!(term, "{}", first_field(&attr).unwrap_or(&attr))?;
+    }
 
     Ok(())
 }
 
-fn skim_attrs() -> Result<(), MainErr> {
+fn first_field(s: &str) -> Option<&str> {
+    s.split(' ').next()
+}
+
+fn skim_attrs() -> Result<Vec<String>, MainErr> {
     use std::env;
     use std::io::Cursor;
 
     let preview_cmd = format!(
-        "{exe} --info {{}}",
+        "{exe} --info {{1}}",
         exe = env::current_exe()
             .map(|p| p.to_string_lossy().into_owned())
             .unwrap_or_else(|_| "nix-query".to_string()),
@@ -100,20 +135,25 @@ fn skim_attrs() -> Result<(), MainErr> {
         .preview(Some(&preview_cmd))
         .preview_window(Some("down:50%"))
         .tiebreak(Some("score,end".to_string()))
+        .no_hscroll(true)
+        .delimiter(Some(nix::FIELD_DELIMITER))
+        .nth(None) // fields to search
+        .with_nth(Some("1")) // fields to show
         .build()
         .unwrap();
 
     let input = cache::ensure_cache()?;
 
-    let selected_items = Skim::run_with(&options, Some(Box::new(Cursor::new(input))))
+    Ok(Skim::run_with(&options, Some(Box::new(Cursor::new(input))))
         .map(|out| out.selected_items)
-        .unwrap_or_else(Vec::new);
-
-    for item in selected_items.iter() {
-        println!("{}", item.get_output_text());
-    }
-
-    Ok(())
+        .map(|items| {
+            items
+                .iter()
+                .map(|i| i.get_text())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_else(Vec::new))
 }
 
 pub fn check_pkg_schemas() {
@@ -157,10 +197,7 @@ pub fn check_pkg_schemas() {
             "--attr",
             &attr,
         ]))
-        .unwrap_or_else(|_| panic!(
-            "Can query Nix for information about attribute {}",
-            attr
-        ));
+        .unwrap_or_else(|_| panic!("Can query Nix for information about attribute {}", attr));
 
         match serde_json::from_str::<nix::AllNixInfo>(&json) {
             Err(d) => {
@@ -173,10 +210,9 @@ pub fn check_pkg_schemas() {
                     inx = inx,
                     len = lines.len(),
                 );
-                i.attrs.values().next().unwrap_or_else(|| panic!(
-                    "String -> NixInfo map for {} has at least one value.",
-                    attr
-                ));
+                i.attrs.values().next().unwrap_or_else(|| {
+                    panic!("String -> NixInfo map for {} has at least one value.", attr)
+                });
             }
         }
     }

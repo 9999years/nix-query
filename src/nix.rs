@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
@@ -5,12 +6,16 @@ use std::fmt::{Display, Formatter};
 use std::process::Command;
 use std::str::FromStr;
 
-use colored::*;
+use console::{style, StyledObject};
+use lazy_static::lazy_static;
+use regex::Regex;
 use serde::{Deserialize, Deserializer};
 use serde_json;
 
 use crate::proc;
 use crate::proc::CommandError;
+
+pub const FIELD_DELIMITER: &str = "    ";
 
 #[derive(Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -42,9 +47,9 @@ impl<'a> ConsoleFormatFullLicense<'a> {
         if has_full_name {
             write!(f, "{}", license.full_name)?;
             parenthetical = true;
-            write!(f, " ({}", "unfree".bold().red())?;
+            write!(f, " ({}", style("unfree").bold().red())?;
         } else {
-            write!(f, "{}", "unfree".bold().red())?;
+            write!(f, "{}", style("unfree").bold().red())?;
         }
 
         if has_short_name {
@@ -59,7 +64,7 @@ impl<'a> ConsoleFormatFullLicense<'a> {
         }
 
         if let Some(url_str) = &license.url {
-            write!(f, " {}", url(url_str.as_ref()))?;
+            write!(f, " {}", url(url_str))?;
         }
 
         Ok(())
@@ -80,7 +85,7 @@ impl<'a> ConsoleFormatFullLicense<'a> {
         }
 
         if let Some(url_str) = &license.url {
-            write!(f, " {}", url(url_str.as_ref()))?;
+            write!(f, " {}", url(url_str))?;
         }
 
         Ok(())
@@ -125,8 +130,8 @@ impl License {
     }
 }
 
-fn url<C: Colorize>(s: C) -> ColoredString {
-    s.underline().cyan()
+fn url<C>(s: C) -> StyledObject<C> {
+    style(s).underlined().cyan()
 }
 
 fn write_licenses(licenses: &[FullLicense], f: &mut Formatter<'_>) -> fmt::Result {
@@ -155,7 +160,7 @@ impl Display for ConsoleFormatLicense<'_> {
         match self.0 {
             License::Id(s) => write!(f, "{}", s),
             License::Named(s) => write!(f, "{}", s.full_name),
-            License::Url(s) => write!(f, "{}", url(s.url.as_ref())),
+            License::Url(s) => write!(f, "{}", url(&s.url)),
             License::Full(s) => write!(f, "{}", s.console_fmt()),
             License::FullVec(s) => write_licenses(s, f),
         }
@@ -305,7 +310,7 @@ impl Display for ConsoleFormatInfo<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         macro_rules! write_val {
             ($f:expr, $label:expr, $val:expr) => {
-                writeln!($f, "{} {}", format!("{}:", $label).bold(), $val)
+                writeln!($f, "{} {}", style(format!("{}:", $label)).bold(), $val)
             };
         }
 
@@ -320,21 +325,21 @@ impl Display for ConsoleFormatInfo<'_> {
         }
 
         let info = self.0;
-        write_val_opt!(f, "attr", &info.attr.as_ref().map(|a| a.bold().green()))?;
-        write_val!(f, "name", info.name.bold().green())?;
+        write_val_opt!(f, "attr", &info.attr.as_ref().map(|a| style(a).bold().green()))?;
+        write_val!(f, "name", style(&info.name).bold().green())?;
 
         let meta = &info.meta;
         if meta.broken {
-            write_val!(f, "broken", "true".bold().red())?;
+            write_val!(f, "broken", style("true").bold().red())?;
         }
         if !meta.available {
-            write_val!(f, "available", "false".bold().red())?;
+            write_val!(f, "available", style("false").bold().red())?;
         }
 
         write_val_opt!(f, "priority", &meta.priority)?;
 
         if let Some(homepage) = &meta.homepage {
-            write_val!(f, "homepage", homepage.underline().cyan())?;
+            write_val!(f, "homepage", style(homepage).underlined().cyan())?;
         }
 
         write_val_opt!(f, "description", &meta.description)?;
@@ -362,7 +367,7 @@ impl Display for ConsoleFormatInfo<'_> {
             "defined in",
             &meta.position.as_ref().map(|pos| format!(
                 "{} line {}",
-                pos.path.underline(),
+                style(&pos.path).underlined(),
                 pos.line,
             ))
         )?;
@@ -403,39 +408,56 @@ pub fn nix_query(attr: &str) -> Result<NixInfo, NixQueryError> {
     })
 }
 
+/// nix-env gives very long lines that are nicely, yet inconveniently, aligned:
+/// ```plain
+/// nixos._0x0                                                                0x0-2018-06-24                                                                      A client for 0x0.st
+/// ```
+/// That's nice. rewrite_attr_line replaces long stretches of whitespace with
+/// FIELD_DELIMITER.
+fn rewrite_attr_line<'a>(line: &'a str) -> Cow<'a, str> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(" {2,}").unwrap();
+    }
+    RE.replace_all(line, FIELD_DELIMITER)
+}
+
+fn rewrite_attr_lines(stdout: String) -> String {
+    stdout
+        .lines()
+        // Attribute names starting with _ are usually meant to be "private"
+        .filter(|attr| !attr.contains("._"))
+        // Reformat each line
+        .fold(String::with_capacity(stdout.len()), |mut acc, line| {
+            acc.push_str(&rewrite_attr_line(line).trim_end());
+            acc.push_str("\n");
+            acc
+        })
+}
+
 pub fn nix_query_all() -> Result<String, CommandError> {
-    let mut output = proc::run_cmd_stdout(Command::new("nix-env").args(&[
-        "--query",
-        "--available",
-        "--no-name",
-        "--attr-path",
-    ]))?;
+    let mut args = vec!["--query", "--available", "--attr-path", "--description"];
+
+    let mut output =
+        proc::run_cmd_stdout(Command::new("nix-env").args(&args)).map(rewrite_attr_lines)?;
 
     // A few sub-packages don't show up by default. Is there a better way to
     // include them...?
     // TODO: Select 'nixpkgs' or 'nixos' automatically, somehow.
     let extra_attrs = &["nixpkgs.nodePackages", "nixpkgs.haskellPackages"];
 
+    args.push("--attr");
+    // We'll fill this last value in with the individual attr in the loop.
+    args.push("");
+
     for base_attr in extra_attrs {
-        output.push_str(&proc::run_cmd_stdout(Command::new("nix-env").args(&[
-            "--query",
-            "--available",
-            "--no-name",
-            "--attr-path",
-            "--attr",
-            base_attr,
-        ]))?);
+        args.pop();
+        args.push(base_attr);
+        output.push_str(
+            &proc::run_cmd_stdout(Command::new("nix-env").args(&args)).map(rewrite_attr_lines)?,
+        );
     }
 
-    Ok(output
-        .lines()
-        // Attribute names starting with _ are usually meant to be "private"
-        .filter(|attr| !attr.contains("._"))
-        .fold(String::with_capacity(output.len()), |mut acc, attr| {
-            acc.push_str(attr);
-            acc.push_str("\n");
-            acc
-        }))
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -507,6 +529,18 @@ mod test {
         let _ = check(
             include_str!("../test_data/acpitool.json"),
             "test_data/acpitool.json",
+        );
+    }
+
+    #[test]
+    fn test_rewrite_attr_lines() {
+        assert_eq!(
+            format!(
+                "{}\n{}\n",
+                "nixpkgs.all-cabal-hashes    10e6ea0c54a4aa41de51d1d7e2314115bb2e172a.tar.gz",
+                "unstable.all-cabal-hashes    10e6ea0c54a4aa41de51d1d7e2314115bb2e172a.tar.gz",
+            ),
+            rewrite_attr_lines(include_str!("../test_data/attrs_unfiltered.txt").to_string())
         );
     }
 }

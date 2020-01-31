@@ -1,0 +1,10 @@
+nixos._0x0                                                                0x0-2018-06-24                                                                      A client for 0x0.st
+nixpkgs._0x0                                                              0x0-2018-06-24                                                                      A client for 0x0.st
+unstable._0x0                                                             0x0-2018-06-24                                                                      A client for 0x0.st
+nixpkgs.all-cabal-hashes                                                  10e6ea0c54a4aa41de51d1d7e2314115bb2e172a.tar.gz                                     
+unstable.all-cabal-hashes                                                 10e6ea0c54a4aa41de51d1d7e2314115bb2e172a.tar.gz                                     
+nixos._1password                                                          1password-0.6.1                                                                     1Password command-line tool
+nixpkgs._1password                                                        1password-0.7.0                                                                     1Password command-line tool
+unstable._1password                                                       1password-0.7.0                                                                     1Password command-line tool
+nixpkgs._2048-in-terminal                                                 2048-in-terminal-2017-11-29                                                         Animated console version of the 2048 game
+unstable._2048-in-terminal                                                2048-in-terminal-2017-11-29                                                         Animated console version of the 2048 game
