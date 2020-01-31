@@ -2,7 +2,7 @@ use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::{Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use dirs;
 use lazy_static::lazy_static;
@@ -32,7 +32,7 @@ pub const NIX_ATTRS_COUNT_ESTIMATE: usize = 100_000;
 pub const NIX_ATTRS_FILE_SIZE_ESTIMATE: usize = 5_000_000;
 
 pub fn cache_exists() -> bool {
-    CACHE_PATH.as_deref().map(Path::is_file).unwrap_or(false)
+    CACHE_PATH.as_ref().map(|p| p.is_file()).unwrap_or(false)
 }
 
 #[derive(Debug)]
@@ -49,15 +49,17 @@ impl From<io::Error> for CacheIoError {
 }
 
 pub fn clear_cache() -> Result<(), CacheIoError> {
-    match fs::remove_file(CACHE_PATH.as_deref().ok_or(CacheIoError::NoCachePath)?) {
+    match fs::remove_file(CACHE_PATH.as_ref().ok_or(CacheIoError::NoCachePath)?) {
         Ok(()) => Ok(()),
-        Err(io_err) => 
-            // If we try to remove the cache file but it doesn't exist yet, that's OK.
+        Err(io_err) =>
+        // If we try to remove the cache file but it doesn't exist yet, that's OK.
+        {
             if let io::ErrorKind::NotFound = io_err.kind() {
                 Ok(())
             } else {
                 Err(io_err.into())
-            },
+            }
+        }
     }
 }
 
