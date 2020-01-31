@@ -64,13 +64,13 @@ pub fn clear_cache() -> Result<(), CacheIoError> {
 }
 
 pub fn write_cache(nix_attrs: &[u8]) -> Result<(), CacheIoError> {
-    File::create(CACHE_PATH.as_deref().ok_or(CacheIoError::NoCachePath)?)?
+    File::create(CACHE_PATH.as_ref().ok_or(CacheIoError::NoCachePath)?)?
         .write_all(nix_attrs)
         .map_err(Into::into)
 }
 
 pub fn read_cache() -> Result<String, CacheIoError> {
-    let mut cache_file = File::open(CACHE_PATH.as_deref().ok_or(CacheIoError::NoCachePath)?)?;
+    let mut cache_file = File::open(CACHE_PATH.as_ref().ok_or(CacheIoError::NoCachePath)?)?;
     let mut ret = String::with_capacity(NIX_ATTRS_FILE_SIZE_ESTIMATE);
     cache_file.read_to_string(&mut ret)?;
     Ok(ret)
