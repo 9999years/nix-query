@@ -1,6 +1,6 @@
 [package]
 name = "nix-query"
-version = "1.0.0"
+version = "1.0.2"
 authors = ["Rebecca Turner <rbt@sent.as>"]
 description = "A cached fuzzy searcher for Nix packages"
 repository = "https://github.com/9999years/nix-query/"
