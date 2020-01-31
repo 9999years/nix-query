@@ -1,0 +1,19 @@
+{
+  "nixpkgs.nodePackages.tern": {
+    "name": "node_tern-0.24.2",
+    "pname": "node_tern",
+    "version": "0.24.2",
+    "system": "x86_64-linux",
+    "meta": {
+      "available": true,
+      "description": "A JavaScript code analyzer for deep, cross-editor language support",
+      "homepage": "https://github.com/ternjs/tern#readme",
+      "license": "MIT",
+      "name": "node_tern-0.24.2",
+      "outputsToInstall": [
+        "out"
+      ],
+      "position": "/nix/store/lybqxz1h84knafw4l9mh248lfiqrw35a-nixpkgs-20.03pre210712.d8cb4ed910c/nixpkgs/pkgs/development/node-packages/node-packages-v10.nix:72689"
+    }
+  }
+}

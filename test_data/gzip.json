@@ -1,0 +1,66 @@
+{
+  "nixos.gzip": {
+    "name": "gzip-1.10",
+    "pname": "gzip",
+    "version": "1.10",
+    "system": "x86_64-linux",
+    "meta": {
+      "available": true,
+      "description": "GNU zip compression program",
+      "homepage": "https://www.gnu.org/software/gzip/",
+      "license": {
+        "fullName": "GNU General Public License v3.0 or later",
+        "shortName": "gpl3Plus",
+        "spdxId": "GPL-3.0-or-later",
+        "url": "http://spdx.org/licenses/GPL-3.0-or-later.html"
+      },
+      "longDescription": "gzip (GNU zip) is a popular data compression program written by\n        Jean-loup Gailly for the GNU project.  Mark Adler wrote the\n        decompression part.\n\n        We developed this program as a replacement for compress because of\n        the Unisys and IBM patents covering the LZW algorithm used by\n        compress.  These patents made it impossible for us to use compress,\n        and we needed a replacement.  The superior compression ratio of gzip\n        is just a bonus.\n",
+      "name": "gzip-1.10",
+      "outputsToInstall": [
+        "out",
+        "man"
+      ],
+      "platforms": [
+        "aarch64-linux",
+        "armv5tel-linux",
+        "armv6l-linux",
+        "armv7a-linux",
+        "armv7l-linux",
+        "mipsel-linux",
+        "i686-cygwin",
+        "i686-freebsd",
+        "i686-linux",
+        "i686-netbsd",
+        "i686-openbsd",
+        "x86_64-cygwin",
+        "x86_64-freebsd",
+        "x86_64-linux",
+        "x86_64-netbsd",
+        "x86_64-openbsd",
+        "x86_64-solaris",
+        "x86_64-darwin",
+        "i686-darwin",
+        "aarch64-darwin",
+        "armv7a-darwin",
+        "x86_64-windows",
+        "i686-windows",
+        "wasm64-wasi",
+        "wasm32-wasi",
+        "powerpc64le-linux",
+        "riscv32-linux",
+        "riscv64-linux",
+        "aarch64-none",
+        "avr-none",
+        "arm-none",
+        "i686-none",
+        "x86_64-none",
+        "powerpc-none",
+        "msp430-none",
+        "riscv64-none",
+        "riscv32-none",
+        "js-ghcjs"
+      ],
+      "position": "/nix/store/rfg9wf45sllq5cjpxgcrn593sfpdwkr6-nixos-19.09.1957.57c35c63004/nixos/pkgs/tools/compression/gzip/default.nix:22"
+    }
+  }
+}

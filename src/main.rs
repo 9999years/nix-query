@@ -1,232 +1,183 @@
-use std::borrow::Borrow;
-use std::convert::{TryFrom, TryInto};
-use std::fs;
-use std::fs::{File, Metadata};
-use std::io;
-use std::io::Cursor;
-use std::io::{BufRead, BufReader, Read, Write};
-use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Output, Stdio};
-use std::str::FromStr;
-use std::string::FromUtf8Error;
-use std::sync::Arc;
-
-use dirs;
-use lazy_static::lazy_static;
 use skim::{Skim, SkimOptionsBuilder};
 use structopt::StructOpt;
+use colored::*;
 
-/// This uniquely identifies this program (nix-query) so that our cache files
-/// don't conflict with anything else.
-const UUID: &str = "bfe01d7a-c700-4529-acf1-88065df2cd25";
-
-lazy_static! {
-    static ref CACHE_PATH: Option<PathBuf> = {
-        Some(
-            [
-                dirs::cache_dir()?,
-                format!("nix-query-{}.cache", UUID).into(),
-            ]
-            .iter()
-            .collect(),
-        )
-    };
-}
-
-const NIX_ATTRS_COUNT_ESTIMATE: usize = 100_000;
-
-fn cache_exists() -> bool {
-    CACHE_PATH.as_deref().map(Path::is_file).unwrap_or(false)
-}
+use nix_query::{cache, cache::CacheIoError, nix, proc::CommandError};
 
 #[derive(Debug)]
-enum CacheIoError {
-    NoCachePath,
-    Io(Box<io::Error>),
+enum MainErr {
+    Cache(CacheIoError),
+    Command(CommandError),
+    NixQuery(nix::NixQueryError),
 }
 
-impl From<io::Error> for CacheIoError {
-    fn from(e: io::Error) -> CacheIoError {
-        CacheIoError::Io(Box::new(e))
+impl From<CacheIoError> for MainErr {
+    fn from(e: CacheIoError) -> Self {
+        MainErr::Cache(e)
     }
 }
 
-fn clear_cache() -> Result<(), CacheIoError> {
-    fs::remove_file(CACHE_PATH.as_deref().ok_or(CacheIoError::NoCachePath)?).map_err(Into::into)
-}
-
-fn write_cache(nix_attrs: &[u8]) -> Result<(), CacheIoError> {
-    File::create(CACHE_PATH.as_deref().ok_or(CacheIoError::NoCachePath)?)?
-        .write_all(nix_attrs)
-        .map_err(Into::into)
-}
-
-type NixAttrs = Vec<String>;
-
-fn read_cache() -> Result<NixAttrs, CacheIoError> {
-    let mut cache_file = File::open(CACHE_PATH.as_deref().ok_or(CacheIoError::NoCachePath)?)?;
-    let mut ret = Vec::with_capacity(NIX_ATTRS_COUNT_ESTIMATE);
-    ret.extend(
-        BufReader::new(cache_file)
-            .lines()
-            .collect::<Result<_, io::Error>>()
-            .map_err(Into::<CacheIoError>::into),
-    );
-    Ok(ret)
-}
-
-fn ensure_cache() -> Result<NixAttrs, CacheIoError> {
-    if !cache_exists() {
-        write_cache(&[])?; // TODO: fix this
-    }
-    read_cache()
-}
-
-#[derive(Debug)]
-enum CommandError {
-    Io(Box<io::Error>),
-    Stderr(String),
-    Encoding(FromUtf8Error),
-    ExitStatus(ExitStatus),
-}
-
-impl From<io::Error> for CommandError {
-    fn from(e: io::Error) -> Self {
-        CommandError::Io(Box::new(e))
+impl From<CommandError> for MainErr {
+    fn from(e: CommandError) -> Self {
+        MainErr::Command(e)
     }
 }
 
-fn run_cmd<F, T>(c: &mut Command, f: F) -> Result<T, CommandError>
-where
-    F: FnOnce(Vec<u8>) -> T,
-{
-    let output = c.output().map_err(Box::new).map_err(CommandError::Io)?;
-
-    if !output.status.success() {
-        return Err(CommandError::ExitStatus(output.status));
+impl From<nix::NixQueryError> for MainErr {
+    fn from(e: nix::NixQueryError) -> Self {
+        MainErr::NixQuery(e)
     }
-
-    if !output.stderr.is_empty() {
-        return Err(CommandError::Stderr(
-            String::from_utf8(output.stderr).map_err(CommandError::Encoding)?,
-        ));
-    }
-
-    Ok(f(output.stdout))
-}
-
-fn run_cmd_stdout(c: &mut Command) -> Result<String, CommandError> {
-    run_cmd(c, |stdout| String::from_utf8(stdout))?.map_err(CommandError::Encoding)
-}
-
-fn run_cmd_stdout_lines_capacity(
-    c: &mut Command,
-    lines_hint: usize,
-) -> Result<Vec<String>, CommandError> {
-    let mut ret = Vec::with_capacity(lines_hint);
-    ret.extend(run_cmd(c, |stdout| {
-        stdout
-            .lines()
-            .collect::<Result<_, io::Error>>()
-            .map_err(Into::<CommandError>::into)
-    })?);
-    Ok(ret)
-}
-fn run_cmd_stdout_lines(c: &mut Command) -> Result<Vec<String>, CommandError> {
-    run_cmd_stdout_lines_capacity(c, 64)
-}
-
-struct License {
-    fullName: String,
-    shortName: String,
-    spdxId: Option<String>,
-    url: Option<String>,
-    free: bool, // default = true
-}
-
-struct NixPath {
-    path: String,
-    line: usize,
-}
-
-impl FromStr for NixPath {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut split = s.split(':');
-        let path = split.next().ok_or(())?.to_string();
-        let line = split.next().ok_or(())?.parse().map_err(|_| ())?;
-        Ok(NixPath { path, line })
-    }
-}
-
-struct Maintainer {
-    email: String,
-    github: String,
-    githubId: usize,
-    name: String,
-}
-
-struct NixMeta {
-    available: bool,
-    broken: bool, // default = false
-    description: String,
-    longDescription: Option<String>,
-    homepage: String, // url
-    license: License,
-    name: String,
-    outputsToInstall: Vec<String>,
-    platforms: Vec<String>,
-    position: NixPath,
-    priority: Option<usize>,
-    maintainers: Vec<Maintainer>,
-}
-
-struct NixInfo {
-    name: String,    // gzip-1.10
-    pname: String,   // gzip
-    version: String, // 1.10
-    system: String,  // x86_64-linux
-    meta: NixMeta,
-}
-
-fn nix_query(attr: &str) -> Result<String, CommandError> {
-    run_cmd_stdout(Command::new("nix-env").args(&[
-        "--query",
-        "--available",
-        "--json",
-        "--attr",
-        attr,
-    ]))
-}
-
-fn nix_query_all() -> Result<NixAttrs, CommandError> {
-    run_cmd_stdout_lines_capacity(
-        Command::new("nix-env").args(&["--query", "--available", "--no-name", "--attr-path"]),
-        NIX_ATTRS_COUNT_ESTIMATE,
-    )
 }
 
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "nix-query",
-    about = "A tool for interactively and quickly selecting Nix packages by attribute."
+    about = "A tool for interactively and quickly selecting Nix packages by attribute.",
+    version = "0.1.0",
 )]
 struct Opt {
     /// Clears and recalculates the cache.
     #[structopt(long)]
     clear_cache: bool,
-}
 
-#[derive(Debug)]
-enum MainErr {
-    Cache(CacheIoError),
+    /// Prints the information for a given Nix attribute.
+    #[structopt(long)]
+    info: Option<String>,
+
+    /// Print all attributes in the cache.
+    #[structopt(long)]
+    print_cache: bool,
 }
 
 fn main() -> Result<(), MainErr> {
     let opt = Opt::from_args();
+
     if opt.clear_cache {
-        clear_cache().map_err(MainErr::Cache)?;
+        cache::clear_cache()?;
     }
+
+    if let Some(attr) = opt.info {
+        colored::control::set_override(true);
+        print!("{}", nix::nix_query(&attr)?.console_fmt());
+        colored::control::unset_override();
+        return Ok(());
+    }
+
+    if !cache::cache_exists() {
+        eprintln!(
+            "{}",
+            "Populating the Nix package name cache (this may take a minute or two)..."
+                .bold()
+                .green(),
+        );
+    }
+    let all_attrs = cache::ensure_cache()?;
+
+    if opt.print_cache {
+        print!("{}", all_attrs);
+        return Ok(());
+    }
+
+    skim_attrs()?;
+
     Ok(())
+}
+
+fn skim_attrs() -> Result<(), MainErr> {
+    use std::env;
+    use std::io::Cursor;
+
+    let preview_cmd = format!(
+        "{exe} --info {{}}",
+        exe = env::current_exe()
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_else(|_| "nix-query".to_string()),
+    );
+
+    let options = SkimOptionsBuilder::default()
+        .height(Some("100%"))
+        .multi(true)
+        .preview(Some(&preview_cmd))
+        .preview_window(Some("down:50%"))
+        .tiebreak(Some("score,end".to_string()))
+        .build()
+        .unwrap();
+
+    let input = cache::ensure_cache()?;
+
+    let selected_items = Skim::run_with(&options, Some(Box::new(Cursor::new(input))))
+        .map(|out| out.selected_items)
+        .unwrap_or_else(Vec::new);
+
+    for item in selected_items.iter() {
+        println!("{}", item.get_output_text());
+    }
+
+    Ok(())
+}
+
+pub fn check_pkg_schemas() {
+    use std::process::Command;
+
+    use nix_query::proc;
+
+    println!("Reading cache.");
+    let mut lines: Vec<String> = cache::ensure_cache()
+        .expect("Can read from cache")
+        .lines()
+        .by_ref()
+        .map(|s| s.to_string())
+        .collect();
+
+    println!("Sorting cache.");
+    lines.sort_unstable();
+
+    println!("Checking.");
+    let mut skipping = true;
+    for (inx, attr) in lines.iter().enumerate() {
+        if attr.starts_with("nixpkgs._")
+            || attr.starts_with("nixos._")
+            || attr.starts_with("unstable._")
+        {
+            continue;
+        }
+
+        if skipping {
+            if attr.starts_with("nixpkgs.lzip") {
+                skipping = false;
+            } else {
+                continue;
+            }
+        }
+
+        let json = proc::run_cmd_stdout(Command::new("nix-env").args(&[
+            "--query",
+            "--available",
+            "--json",
+            "--attr",
+            &attr,
+        ]))
+        .unwrap_or_else(|_| panic!(
+            "Can query Nix for information about attribute {}",
+            attr
+        ));
+
+        match serde_json::from_str::<nix::AllNixInfo>(&json) {
+            Err(d) => {
+                println!("{} | {}\n\t{}", attr, d, json);
+            }
+            Ok(i) => {
+                println!(
+                    "OK: {attr} [{inx}/{len}]",
+                    attr = attr,
+                    inx = inx,
+                    len = lines.len(),
+                );
+                i.attrs.values().next().unwrap_or_else(|| panic!(
+                    "String -> NixInfo map for {} has at least one value.",
+                    attr
+                ));
+            }
+        }
+    }
 }

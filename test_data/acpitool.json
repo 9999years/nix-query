@@ -1,0 +1,58 @@
+{
+  "nixpkgs.acpitool": {
+    "name": "acpitool-0.5.1",
+    "pname": "acpitool",
+    "version": "0.5.1",
+    "system": "x86_64-linux",
+    "meta": {
+      "available": true,
+      "description": "A small, convenient command-line ACPI client with a lot of features",
+      "homepage": "https://sourceforge.net/projects/acpitool/",
+      "license": {
+        "fullName": "GNU General Public License v2.0 or later",
+        "shortName": "gpl2Plus",
+        "spdxId": "GPL-2.0-or-later",
+        "url": "http://spdx.org/licenses/GPL-2.0-or-later.html"
+      },
+      "maintainers": [
+        {
+          "email": "david.guibert@gmail.com",
+          "github": "dguibert",
+          "githubId": 1178864,
+          "name": "David Guibert"
+        }
+      ],
+      "name": "acpitool-0.5.1",
+      "outputsToInstall": [
+        "out"
+      ],
+      "platforms": [
+        "aarch64-linux",
+        "armv5tel-linux",
+        "armv6l-linux",
+        "armv7a-linux",
+        "armv7l-linux",
+        "mipsel-linux",
+        "i686-cygwin",
+        "i686-freebsd",
+        "i686-linux",
+        "i686-netbsd",
+        "i686-openbsd",
+        "x86_64-cygwin",
+        "x86_64-freebsd",
+        "x86_64-linux",
+        "x86_64-netbsd",
+        "x86_64-openbsd",
+        "x86_64-solaris",
+        "x86_64-darwin",
+        "i686-darwin",
+        "aarch64-darwin",
+        "armv7a-darwin",
+        "powerpc64le-linux",
+        "riscv32-linux",
+        "riscv64-linux"
+      ],
+      "position": "/nix/store/lybqxz1h84knafw4l9mh248lfiqrw35a-nixpkgs-20.03pre210712.d8cb4ed910c/nixpkgs/pkgs/os-specific/linux/acpitool/default.nix:45"
+    }
+  }
+}
