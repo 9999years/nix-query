@@ -32,21 +32,19 @@ impl From<nix::NixQueryError> for MainErr {
 #[derive(Debug, StructOpt)]
 #[structopt(
     name = "nix-query",
-    about = "A tool for interactively and quickly selecting Nix packages by attribute.",
-    version = "0.1.0",
 )]
 struct Opt {
-    /// Clears and recalculates the cache.
+    /// Clear and recalculate the cache.
     #[structopt(long)]
     clear_cache: bool,
-
-    /// Prints the information for a given Nix attribute.
-    #[structopt(long)]
-    info: Option<String>,
 
     /// Print all attributes in the cache.
     #[structopt(long)]
     print_cache: bool,
+
+    /// Prints the information for a given Nix attribute and then quit.
+    #[structopt(long)]
+    info: Option<String>,
 }
 
 fn main() -> Result<(), MainErr> {
@@ -98,7 +96,7 @@ fn skim_attrs() -> Result<(), MainErr> {
         .height(Some("100%"))
         .multi(true)
         .preview(Some(&preview_cmd))
-        .preview_window(Some("down:50%"))
+        .preview_window(Some("down:wrap:50%"))
         .tiebreak(Some("score,end".to_string()))
         .build()
         .unwrap();
