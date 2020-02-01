@@ -1,17 +1,17 @@
 { stdenv, lib, rustPlatform, fetchFromGitHub, ... }:
 rustPlatform.buildRustPackage rec {
   pname = "nix-query";
-  version = "1.0.2";
+  version = "1.1.0";
 
   src = fetchFromGitHub {
     owner = "9999years";
     repo = "nix-query";
     rev = "v${version}";
     sha512 =
-      "3yin1rmwggvfgy87qfhbndz8828x2g82csxlv41sibxa09nnblhfl5ig5zpln96lm2zjrck03bg1xmw3ihjkkbcix0zmbrd29502wrm";
+      "0pyl7h560g0kk3cf2866pznbghrg0n7n7l3ljnjac16chbldwy7whsjnv0ac13gi64k1213fhh3s92mykbwmdr6m3jqf38d83x4h5ni";
   };
 
-  cargoSha256 = "1wicg5709s0i8z72xiz3a7z6m8zv8y5g6i9jkdxrahqkw8fpyaj7";
+  cargoSha256 = "17kwc4ndwd5bkz7lsy2dgi8kphfvfaclx4npc36p06c6sf5f1k8p";
 
   meta = with lib; {
     description = "A cached Nix package fuzzy-search.";
