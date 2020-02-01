@@ -400,7 +400,7 @@ dependencies = [
 
 [[package]]
 name = "nix-query"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "console 0.9.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "dirs 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
